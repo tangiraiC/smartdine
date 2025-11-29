@@ -1,0 +1,41 @@
+# ignore ONLY recommender/data
+cat > .gitignore << 'EOF'
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+recommender/data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.ipynb_checkpoints/
+
+# Environments
+.env
+.venv
+venv/
+env/
+*.swp
+
+# Data & embeddings
+recommender/data/raw/
+recommender/data/processed/*.parquet
+recommender/cache/
+recommender/checkpoints/
+recommender/reports/*.csv
+recommender/serving/*.npz
+*.npy
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+EOF
+

@@ -1,0 +1,9 @@
+{
+  "model_type": "joint_rec",
+  "n_users": 29596,
+  "text_dim": 768,
+  "img_dim": 768,
+  "dense_dim": 8,
+  "user_emb_dim": 64,
+  "hidden_dims": [512, 256]
+}
