@@ -4,10 +4,15 @@
 Week 5 diagnostics for SmartDine:
 
 - Load per-item features & metadata
-- Visualize item spaces (PCA / t-SNE)
+- Visualize item spaces (PCA)
 - Inspect query steering (pizza/sushi/vegan/etc.)
 - Modality ablation: text-only vs img-only vs dense-only scores
 - Popularity vs model score
+
+This version:
+  - Uses a non-interactive matplotlib backend (Agg)
+  - Saves plots to: recommender/analysis/figures_week5/
+  - Skips t-SNE to avoid segfaults and GUI issues
 """
 
 from pathlib import Path
@@ -18,7 +23,9 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
+
+import matplotlib
+matplotlib.use("Agg")  # non-interactive backend for saving images only
 import matplotlib.pyplot as plt
 
 from recommender.models.joint import JointRecModel
@@ -29,9 +36,13 @@ BASE_DIR = Path(__file__).resolve().parents[1]  # recommender/
 SERVING_DIR = BASE_DIR / "serving"
 CACHE_DIR = BASE_DIR / "cache"
 INDEX_DIR = CACHE_DIR / "index"
+PLOT_DIR = BASE_DIR / "analysis" / "figures_week5"
 
 
 def load_model_and_items():
+    """
+    Load trained joint model and per-item feature cache.
+    """
     # ---- model ----
     cfg_path = SERVING_DIR / "joint_config.json"
     ckpt_path = BASE_DIR / "checkpoints" / "joint_best.pt"
@@ -67,7 +78,7 @@ def load_model_and_items():
     img_emb = torch.from_numpy(cache["img_emb"]).float()
     dense = torch.from_numpy(cache["dense"]).float()
 
-    # ---- metadata ----
+    # ---- metadata ---- (optional for later extensions)
     try:
         with open(meta_path, "r", encoding="utf-8") as f:
             meta_list = json.load(f)
@@ -90,9 +101,13 @@ def load_item_popularity():
     return stats
 
 
-def pca_visualization(text_emb, img_emb, business_ids, item_stats):
+def pca_visualization(text_emb, img_emb, business_ids, item_stats, output_dir: Path):
     """
-    PCA on text and image embeddings. Color by mean rating.
+    PCA on text and image embeddings. Color points by mean rating.
+
+    Saves:
+      - pca_text.png
+      - pca_image.png
     """
     print("Running PCA on text embeddings...")
     pca_text = PCA(n_components=2)
@@ -115,7 +130,10 @@ def pca_visualization(text_emb, img_emb, business_ids, item_stats):
     plt.colorbar(sc, label="Mean rating")
     plt.title("PCA of text embeddings (colored by mean rating)")
     plt.tight_layout()
-    plt.show()
+    out_path = output_dir / "pca_text.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved text PCA plot to {out_path}")
 
     # Image PCA plot
     plt.figure(figsize=(6, 5))
@@ -123,32 +141,19 @@ def pca_visualization(text_emb, img_emb, business_ids, item_stats):
     plt.colorbar(sc, label="Mean rating")
     plt.title("PCA of image embeddings (colored by mean rating)")
     plt.tight_layout()
-    plt.show()
-
-
-def tsne_visualization(text_emb, sample_size=2000, random_state=42):
-    """
-    t-SNE on a subset of items, purely to visualize clusters in text space.
-    """
-    print("Running t-SNE on subset of text embeddings...")
-    np.random.seed(random_state)
-    M = text_emb.shape[0]
-    idx = np.random.choice(M, size=min(sample_size, M), replace=False)
-    X = text_emb[idx].numpy()
-
-    tsne = TSNE(n_components=2, perplexity=30, random_state=random_state)
-    X_2d = tsne.fit_transform(X)
-
-    plt.figure(figsize=(6, 5))
-    plt.scatter(X_2d[:, 0], X_2d[:, 1], s=5)
-    plt.title("t-SNE of text embeddings (subset)")
-    plt.tight_layout()
-    plt.show()
+    out_path = output_dir / "pca_image.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved image PCA plot to {out_path}")
 
 
 def query_steering_diagnostics(model, business_ids, text_emb, img_emb, dense):
     """
     Compare top items with and without query-text steering for several queries.
+
+    Prints:
+      - overlap of top-10
+      - top-5 IDs for base vs query-steered scores
     """
     queries = ["pizza", "sushi", "vegan", "bbq", "brunch"]
     M = text_emb.shape[0]
@@ -177,13 +182,18 @@ def query_steering_diagnostics(model, business_ids, text_emb, img_emb, dense):
         overlap = len(set(base_bids) & set(comb_bids))
         print(f"\n=== Query: '{q}' ===")
         print(f"Overlap between base and combined top-10: {overlap}/10")
-        print("Top-5 base-only IDs:", [str(b) for b in base_bids[:5]])
+        print("Top-5 base IDs:    ", [str(b) for b in base_bids[:5]])
         print("Top-5 combined IDs:", [str(b) for b in comb_bids[:5]])
 
 
 def modality_ablation(model, business_ids, text_emb, img_emb, dense):
     """
     Examine how each modality contributes by zeroing out others.
+
+    Prints:
+      - corr(full, text_only)
+      - corr(full, img_only)
+      - corr(full, dense_only)
     """
     M = text_emb.shape[0]
     user_idx = torch.zeros(M, dtype=torch.long)
@@ -212,9 +222,12 @@ def modality_ablation(model, business_ids, text_emb, img_emb, dense):
     print("corr(full, dense_only):", corr(full_scores, scores_dense_only))
 
 
-def popularity_vs_score(model, business_ids, text_emb, img_emb, dense, item_stats):
+def popularity_vs_score(model, business_ids, text_emb, img_emb, dense, item_stats, output_dir: Path):
     """
     Scatter plot: popularity (num_ratings) vs model score.
+
+    Saves:
+      - popularity_vs_score.png
     """
     M = text_emb.shape[0]
     user_idx = torch.zeros(M, dtype=torch.long)
@@ -235,25 +248,31 @@ def popularity_vs_score(model, business_ids, text_emb, img_emb, dense, item_stat
     plt.ylabel("Model score")
     plt.title("Popularity vs model score")
     plt.tight_layout()
-    plt.show()
+    out_path = output_dir / "popularity_vs_score.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved popularity vs score plot to {out_path}")
 
 
 def main():
+    # Ensure plot directory exists
+    PLOT_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"Saving Week 5 diagnostic figures under: {PLOT_DIR}")
+
     model, business_ids, text_emb, img_emb, dense, meta_by_id = load_model_and_items()
     item_stats = load_item_popularity()
 
-    # 1) Visualize spaces
-    pca_visualization(text_emb, img_emb, business_ids, item_stats)
-    tsne_visualization(text_emb)
+    # 1) Visualize spaces (PCA only for stability)
+    pca_visualization(text_emb, img_emb, business_ids, item_stats, PLOT_DIR)
 
-    # 2) Query steering
+    # 2) Query steering (prints only)
     query_steering_diagnostics(model, business_ids, text_emb, img_emb, dense)
 
-    # 3) Modality ablation
+    # 3) Modality ablation (prints only)
     modality_ablation(model, business_ids, text_emb, img_emb, dense)
 
-    # 4) Popularity vs score
-    popularity_vs_score(model, business_ids, text_emb, img_emb, dense, item_stats)
+    # 4) Popularity vs score (saved as PNG)
+    popularity_vs_score(model, business_ids, text_emb, img_emb, dense, item_stats, PLOT_DIR)
 
 
 if __name__ == "__main__":

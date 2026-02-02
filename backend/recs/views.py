@@ -15,10 +15,14 @@ def recommendations(request):
     # Week-1 stub: return an empty list in the agreed shape
     return JsonResponse({"k": 10, "model_version": "stub-0.1", "results": []})
 
+
 @require_GET
 def restaurant_detail(request, business_id: str):
-    # Week-1 stub: not seeded yet
-    return JsonResponse({"detail": "Not found"}, status=404)
+    from .services import get_item_details
+    data = get_item_details(business_id)
+    if not data:
+        return JsonResponse({"detail": "Not found"}, status=404)
+    return JsonResponse(data)
 
 from rest_framework.views import APIView
 from rest_framework.response import Response

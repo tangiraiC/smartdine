@@ -1,41 +1,47 @@
-# ignore ONLY recommender/data
-cat > .gitignore << 'EOF'
+# System
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
-__pycache__/
-*.pyc
-recommender/data/
 
 # Python
 __pycache__/
+*.pyc
 *.py[cod]
 *.pyo
 *.pyd
 *.so
 *.ipynb_checkpoints/
-
-# Environments
 .env
 .venv
 venv/
 env/
-*.swp
 
-# Data & embeddings
-recommender/data/raw/
-recommender/data/processed/*.parquet
+# Django
+*.log
+*.pot
+*.pyc
+__pycache__/
+local_settings.py
+db.sqlite3
+media/
+staticfiles/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Recommender Data
+recommender/data/
 recommender/cache/
 recommender/checkpoints/
 recommender/reports/*.csv
 recommender/serving/*.npz
+recommender/serving/item_metadata.json
 *.npy
 
-# OS / IDE
-.DS_Store
-.idea/
-.vscode/
-
-EOF
+# Temporary
+check_defaults.py
+verify_*.py
 

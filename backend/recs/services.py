@@ -146,10 +146,17 @@ def rank_candidates(preferences: dict, k: int = 10) -> list[dict]:
         sim = torch.matmul(text_emb_norm, q_emb_norm.T).squeeze(-1)  # (M,)
 
     # 3) Combine: base_scores + λ * sim
-    lambda_query = 0.5  # you can tune this offline
-    combined = base_scores + lambda_query * sim  # (M,)
+    # Default weights: joint=1.0, text=10.0 (boosted for correctness)
+    weights = preferences.get("weights") or {}
+    w_joint = float(weights.get("joint_score", 1.0))
+    w_text = float(weights.get("text_similarity", 10.0))
+
+    combined = (w_joint * base_scores) + (w_text * sim)
 
     scores_np = combined.detach().cpu().numpy()
+    base_np = base_scores.detach().cpu().numpy()
+    sim_np = sim.detach().cpu().numpy()
+
     topk_idx = np.argsort(-scores_np)[:k]
 
     results = []
@@ -161,6 +168,10 @@ def rank_candidates(preferences: dict, k: int = 10) -> list[dict]:
         results.append({
             "business_id": bid,
             "score": score,
+            "components": {
+                "joint_score": float(base_np[i]),
+                "text_similarity": float(sim_np[i]),
+            },
             "name": meta.get("name"),
             "representative_image_url": meta.get("image_url"),
             "avg_rating": meta.get("avg_rating"),
@@ -168,3 +179,28 @@ def rank_candidates(preferences: dict, k: int = 10) -> list[dict]:
         })
 
     return results
+
+
+def get_item_details(business_id: str) -> dict | None:
+    """
+    Fetch full details for a specific business ID.
+    Returns dict or None if not found.
+    """
+    _load_model_and_items()
+    meta = _item_meta_by_id.get(business_id)
+    if not meta:
+        return None
+    
+    # Return a clean dict with what we have
+    return {
+        "business_id": meta.get("business_id"),
+        "name": meta.get("name"),
+        "address": meta.get("address"),  # Assuming these exist in meta
+        "city": meta.get("city"),
+        "state": meta.get("state"),
+        "sales_volume": meta.get("sales_volume"), # if available
+        "image_url": meta.get("image_url"),
+        "avg_rating": meta.get("avg_rating"),
+        "num_reviews": meta.get("num_reviews"),
+        # Add any other fields from item_metadata.json
+    }
